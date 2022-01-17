@@ -1,0 +1,9 @@
+make -f /mnt/c/Users/gonca/OneDrive - Universidade de Lisboa/Desktop/uni/SO/Projeto 2/tecnicofs_ex2/C:\Users\gonca\OneDrive\Ambiente de Trabalho\uni\IAED\Labs\IAED_Lab2 --dry-run --always-make --keep-going --print-directory
+make: Entering directory '/mnt/c/Users/gonca/OneDrive - Universidade de Lisboa/Desktop/uni/SO/Projeto 2/tecnicofs_ex2'
+make: Leaving directory '/mnt/c/Users/gonca/OneDrive - Universidade de Lisboa/Desktop/uni/SO/Projeto 2/tecnicofs_ex2'
+ 
+make: /mnt/c/Users/gonca/OneDrive - Universidade de Lisboa/Desktop/uni/SO/Projeto 2/tecnicofs_ex2/C:\Users\gonca\OneDrive\Ambiente de Trabalho\uni\IAED\Labs\IAED_Lab2: No such file or directory
+make: *** No rule to make target '/mnt/c/Users/gonca/OneDrive - Universidade de Lisboa/Desktop/uni/SO/Projeto 2/tecnicofs_ex2/C:\Users\gonca\OneDrive\Ambiente de Trabalho\uni\IAED\Labs\IAED_Lab2'.
+make: Failed to remake makefile '/mnt/c/Users/gonca/OneDrive - Universidade de Lisboa/Desktop/uni/SO/Projeto 2/tecnicofs_ex2/C:\Users\gonca\OneDrive\Ambiente de Trabalho\uni\IAED\Labs\IAED_Lab2'.
+make: *** No targets specified and no makefile found.  Stop.
+ 
