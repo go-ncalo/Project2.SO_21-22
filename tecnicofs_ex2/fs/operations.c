@@ -12,14 +12,10 @@ static pthread_cond_t open_files_cond;
 static int open_files = 0;
 
 static pthread_mutex_t init_mutex;
-static pthread_cond_t init_cond;
 static int init = 0;
 
 int tfs_init() {
     state_init();
-
-    if (pthread_cond_init(&init_cond, 0) != 0)
-        return -1;
     
     if (pthread_cond_init(&open_files_cond, 0) != 0)
         return -1;
@@ -41,7 +37,6 @@ int tfs_init() {
 
     pthread_mutex_lock(&init_mutex);
     init = 1;
-    pthread_cond_signal(&init_cond);
     pthread_mutex_unlock(&init_mutex);
 
     return 0;
@@ -61,9 +56,6 @@ int tfs_destroy() {
     if (pthread_mutex_destroy(&init_mutex) != 0) {
         return -1;
     }
-
-    if (pthread_cond_destroy(&init_cond) != 0)
-        return -1;
     
     if (pthread_cond_destroy(&open_files_cond) != 0)
         return -1;
@@ -168,8 +160,9 @@ static int _tfs_open_unsynchronized(char const *name, int flags) {
 int tfs_open(char const *name, int flags) {
 
     pthread_mutex_lock(&init_mutex);
-    while (init != 1) {
-        pthread_cond_wait(&init_cond, &init_mutex);
+    if (init != 1) {
+        pthread_mutex_unlock(&init_mutex);
+        return -1;
     }
     pthread_mutex_unlock(&init_mutex);
     
