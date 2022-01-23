@@ -1,19 +1,31 @@
 #include "tecnicofs_client_api.h"
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
-// função para receber replies
-// variável com o session_id
-// maybe uma struct ?? com o session_id e as pipes
+static char const *server_pipe;
+static int session_id;
 
 int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     char *pipename = client_pipe_path;
-    mkfifo(pipename);
-    // abrir os pipes
+    mkfifo(pipename,0777);
     int fwr = open(server_pipe_path,O_WRONLY);
-    int frd = open(pipename, O_RDONLY):
-    // por as cenas num buffer, pq é só um write
     write(fwr,TFS_OP_CODE_MOUNT,strlen(TFS_OP_CODE_MOUNT)+1);
+    close(fwr);
+    int fwr = open(server_pipe_path,O_WRONLY);
     write(fwr,client_pipe_path,strlen(client_pipe_path)+1);
-    //ler 
+    close(fwr);
+    int frd = open(pipename, O_RDONLY);
+    read(frd,session_id,strlen(session_id)+1);
+    close(frd);
+
+    if (session_id!=-1) {
+        return 0;
+    }
 
     return -1;
 }
