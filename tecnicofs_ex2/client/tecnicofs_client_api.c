@@ -23,8 +23,9 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     if (fwr==-1) {
         printf("erro na abertura da pipe do server \n");
     }
+    printf("fwr: %d\n", fwr);
     printf("abriu pipe do server\n");
-    char *buffer = '1';
+    char *buffer = "1";
     if (write(fwr, buffer,sizeof(char))==-1) {
         printf("erro na escrita no server %d\n", errno);
     }
@@ -32,7 +33,9 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     close(fwr);
     fwr = open(server_pipe_path,O_WRONLY);
     printf("abriu pipe do server\n");
-    write(fwr,client_pipe_path,strlen(client_pipe_path));
+    if (write(fwr,client_pipe_path,strlen(client_pipe_path))==-1) {
+        printf("erro na escrita no server %d\n", errno);
+    }
     close(fwr);
     printf("escreveu na pipe do server\n");
     int frd = open(pipename, O_RDONLY);

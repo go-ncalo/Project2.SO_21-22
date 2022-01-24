@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
     
     tfs_init();
 
-    char r;
+    char r[1];
 
     /* TO DO */
 
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
             printf("%c\n", r);
         }
 
-        switch (r)
+        switch (r[0])
         {
             case TFS_OP_CODE_MOUNT: {
                 printf("leu da pipe do server\n");
