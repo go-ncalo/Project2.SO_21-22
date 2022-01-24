@@ -6,22 +6,39 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <errno.h>
+
 
 static char const *server_pipe;
 static int session_id;
 
 int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
+    printf("entrou no tfs_mount\n");
     char *pipename = client_pipe_path;
-    mkfifo(pipename,0777);
+    unlink(pipename);
+    if (mkfifo (pipename, 0777) < 0)
+		exit (1);
+    printf("criou pipe do client\n");
     int fwr = open(server_pipe_path,O_WRONLY);
-    write(fwr,TFS_OP_CODE_MOUNT,strlen(TFS_OP_CODE_MOUNT)+1);
+    if (fwr==-1) {
+        printf("erro na abertura da pipe do server \n");
+    }
+    printf("abriu pipe do server\n");
+    char *buffer = '1';
+    if (write(fwr, buffer,sizeof(char))==-1) {
+        printf("erro na escrita no server %d\n", errno);
+    }
+    printf("escreveu na pipe do server\n");
     close(fwr);
-    int fwr = open(server_pipe_path,O_WRONLY);
-    write(fwr,client_pipe_path,strlen(client_pipe_path)+1);
+    fwr = open(server_pipe_path,O_WRONLY);
+    printf("abriu pipe do server\n");
+    write(fwr,client_pipe_path,strlen(client_pipe_path));
     close(fwr);
+    printf("escreveu na pipe do server\n");
     int frd = open(pipename, O_RDONLY);
-    read(frd,session_id,strlen(session_id)+1);
+    read(frd,session_id,strlen(session_id));
     close(frd);
+    printf("leu da pipe do client\n");
 
     if (session_id!=-1) {
         return 0;

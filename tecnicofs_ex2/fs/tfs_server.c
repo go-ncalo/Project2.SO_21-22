@@ -3,6 +3,7 @@
 #include <sys/stat.h> 
 #include <fcntl.h> 
 #include <errno.h>
+#include <string.h>
 
 
 #define S 20
@@ -25,7 +26,7 @@ int main(int argc, char **argv) {
     printf("Starting TecnicoFS server with pipe called %s\n", pipename);
 
     unlink(pipename);
-    if (mkfifo (pipename, 0777) < 0)
+    if (mkfifo (pipename, 0640) < 0)
 		exit (1);
 
 
@@ -44,31 +45,40 @@ int main(int argc, char **argv) {
 
     /*onde escrevemos para fifo do servidor o OPCODE  eos argumentos*/
 
+    fserver=open(pipename,O_RDONLY);
+    if (fserver==-1) {
+        printf("erro HERE\n");
+    }
+    printf("abriu a pipe do server\n");
+
     while (1) {
-        fserver=open(pipename,O_RDONLY);
-        read(fserver,r,sizeof(char)+1);
-        close(fserver);
+        
+        if (read(fserver,r,sizeof(char))>0) {
+            printf("olá, entrei aqui\n");
+            //printf("erro no read\n");
+            //close(fserver);
+            //fserver=open(pipename,O_RDONLY);
+            printf("%c\n", r);
+        }
+
         switch (r)
         {
             case TFS_OP_CODE_MOUNT: {
+                printf("leu da pipe do server\n");
                 int session_id=addSession();
+                printf("criou id\n");
                 fserver=open(pipename,O_RDONLY);
-                read(pipename,client_pipes[session_id],PIPENAME_SIZE+1);
+                read(fserver,client_pipes[session_id],PIPENAME_SIZE);
                 close(fserver);
-                if (session_id!=-1) {
-                    unlink(client_pipes[session_id]);
-                    if (mkfifo (client_pipes[session_id], 0777) < 0)
-		                exit (1);
-                }
                 fclient=open(client_pipes[session_id],O_WRONLY);
-                write(fclient,session_id,sizeof(int)+1);
+                write(fclient,session_id,sizeof(int));
                 close(fclient);
+                printf("escreveu na pipe do client\n");
                 break;
             }
         }
-
-    return 0;
     }
+    return 0;
 }
 
 int addSession() {
@@ -90,7 +100,7 @@ int deleteSession(int id) {
 
     freeSessions[id]==FREE;
     sessions--;
-    client_pipes[id]=NULL;
+    strcpy(client_pipes[id],NULL);
 
 }
 
