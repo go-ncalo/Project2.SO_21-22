@@ -72,6 +72,8 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t len);
  */
 ssize_t tfs_read(int fhandle, void *buffer, size_t len);
 
+int write_on_server_pipe(const void* message,size_t bytes);
+
 /*
  * Orders TecnicoFS server to wait until no file is open and then shutdown
  * Returns 0 if successful, -1 otherwise.

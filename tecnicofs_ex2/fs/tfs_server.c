@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
 
     /* TO DO */
 
-    
+    int i=0;
 
     /*onde escrevemos para fifo do servidor o OPCODE  eos argumentos*/
 
@@ -50,35 +50,18 @@ int main(int argc, char **argv) {
         printf("erro HERE\n");
     }
     printf("abriu a pipe do server\n");
+    while (i==0) {
 
-    while (1) {
-        
-        if (read(fserver,r,sizeof(char))>0) {
-            printf("olá, entrei aqui\n");
-            printf("%c\n", r);
+        if (read(fserver,r,sizeof(char))==0) {
+            close(fserver);
+            fserver=open(pipename,O_RDONLY);
         }
 
         switch (r[0])
         {
             case TFS_OP_CODE_MOUNT: {
-                printf("leu da pipe do server\n");
-                int session_id=addSession();
-                printf("criou id: %d\n", session_id);
-                printf("%s\n", pipename);
-                fserver=open(pipename,O_RDONLY);
-                if (fserver == -1) {
-                    printf("error\n");
-                }
-
-                if (read(fserver,client_pipes[session_id],PIPENAME_SIZE) == -1) {
-                    printf("erro\n");
-                }
-                printf("leu");
-                close(fserver);
-                fclient=open(client_pipes[session_id],O_WRONLY);
-                write(fclient,session_id,sizeof(int));
-                close(fclient);
-                printf("escreveu na pipe do client\n");
+                tfs_mount(fserver);
+                i=1;
                 break;
             }
         }
@@ -107,6 +90,23 @@ int deleteSession(int id) {
     sessions--;
     strcpy(client_pipes[id],NULL);
 
+}
+
+void tfs_mount(int fserver) {
+    printf("leu da pipe do server\n");
+    int session_id=addSession();
+    printf("criou id: %d\n", session_id);
+    if (fserver == -1) {
+        printf("error\n");
+    }
+
+    if (read(fserver,client_pipes[session_id],PIPENAME_SIZE) == -1) {
+        printf("erro\n");
+    }
+    int fclient=open(client_pipes[session_id],O_WRONLY);
+    write(fclient,session_id,sizeof(int));
+    close(fclient);
+    printf("escreveu na pipe do client\n");
 }
 
 

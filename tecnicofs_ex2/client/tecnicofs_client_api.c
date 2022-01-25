@@ -10,38 +10,46 @@
 
 
 static char const *server_pipe;
+static char const *client_pipe;
 static int session_id;
 
 int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
-    //printf("entrou no tfs_mount\n");
+
+    server_pipe=malloc(strlen(server_pipe_path)+1);
+    memcpy(server_pipe,server_pipe_path,strlen(server_pipe_path)+1);
+    client_pipe=malloc(strlen(client_pipe_path)+1);
+    memcpy(client_pipe,client_pipe_path,strlen(client_pipe_path)+1);
+
     char *pipename = client_pipe_path;
     unlink(pipename);
     if (mkfifo (pipename, 0777) < 0)
 		exit (1);
-    //printf("criou pipe do client\n");
-    int fwr = open(server_pipe_path,O_WRONLY);
-    //if (fwr==-1) {
-        //printf("erro na abertura da pipe do server \n");
-    //}
-    //printf("fwr: %d\n", fwr);
-    //printf("abriu pipe do server\n");
-    char buffer = TFS_OP_CODE_MOUNT;
-    if (write(fwr, &buffer,sizeof(char))==-1) {
-        printf("erro na escrita no server %d\n", errno);
+    
+    if (write_on_server_pipe(TFS_OP_CODE_MOUNT,sizeof(char))==-1) {
+        return -1;
     }
-    //printf("escreveu na pipe do server\n");
-    close(fwr);
-    fwr = open(server_pipe_path,O_WRONLY);
-    printf("abriu pipe do server\n");
-    if (write(fwr,client_pipe_path,strlen(client_pipe_path))==-1) {
-        printf("erro na escrita no serverdfdsf %d\n", errno);
+    printf("escreveu opcode no server\n");
+
+    if (write_on_server_pipe(client_pipe_path,strlen(client_pipe_path)+1)==-1) {
+        return -1;
     }
-    close(fwr);
-    printf("escreveu na pipe do server\n");
-    int frd = open(pipename, O_RDONLY);
-    read(frd,session_id,strlen(session_id));
-    close(frd);
-    printf("leu da pipe do client\n");
+    printf("escreveu client path no server\n");
+
+
+    //int session_id=read_int_client_pipe();
+
+    int frd = open(client_pipe_path,O_RDONLY);
+    if (frd==-1) {
+        return -1;
+    }
+    if (read(frd,session_id,sizeof(int))==-1) {
+        return -1;
+    }
+    if (close(frd)==-1) {
+        return -1;
+    }
+
+    printf("Session id: %d\n", session_id);
 
     if (session_id!=-1) {
         return 0;
@@ -51,13 +59,26 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
 }
 
 int tfs_unmount() {
-
-    
+    free(client_pipe);
+    free(server_pipe);
     return -1;
 }
 
 int tfs_open(char const *name, int flags) {
-    /* TODO: Implement this */
+
+    /*int fwr = open(server_pipe,O_WRONLY);
+    if (fwr==-1) {
+        return -1;
+    }
+    char buffer = TFS_OP_CODE_OPEN;
+    if (write(fwr, &buffer,sizeof(char))==-1) {
+        return -1;
+    }
+    if (close(fwr)==-1) {
+        return -1;
+    }
+    */
+    
     return -1;
 }
 
@@ -79,4 +100,42 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 int tfs_shutdown_after_all_closed() {
     /* TODO: Implement this */
     return -1;
+}
+
+
+int write_on_server_pipe(const void* message,size_t bytes) {
+    int fwr = open(server_pipe,O_WRONLY);
+    if (fwr==-1) {
+        return -1;
+    }
+    if (write(fwr, &message,bytes)==-1) {
+        return -1;
+    }
+    if (close(fwr)==-1) {
+        return -1;
+    }
+    return 0;
+}
+
+int read_int_client_pipe() {
+    printf("entrou no read\n");
+    int value;
+    printf("here\n");
+    int frd = open(client_pipe,O_RDONLY);
+    printf("erro\n");
+    if (frd==-1) {
+        printf("erro1\n");
+        return -1;
+    }
+    if (read(frd,value,sizeof(int))==-1) {
+        printf("erro2\n");
+        return -1;
+    }
+    if (close(frd)==-1) {
+         printf("erro3\n");
+        return -1;
+    }
+    printf("value: %d\n", value);
+    return value;
+
 }
