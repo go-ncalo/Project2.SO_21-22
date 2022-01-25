@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    char *pipename = argv[1];
+    char const *pipename = argv[1];
 
     int fserver, fclient;
     printf("Starting TecnicoFS server with pipe called %s\n", pipename);
@@ -55,9 +55,6 @@ int main(int argc, char **argv) {
         
         if (read(fserver,r,sizeof(char))>0) {
             printf("olá, entrei aqui\n");
-            //printf("erro no read\n");
-            //close(fserver);
-            //fserver=open(pipename,O_RDONLY);
             printf("%c\n", r);
         }
 
@@ -66,9 +63,17 @@ int main(int argc, char **argv) {
             case TFS_OP_CODE_MOUNT: {
                 printf("leu da pipe do server\n");
                 int session_id=addSession();
-                printf("criou id\n");
+                printf("criou id: %d\n", session_id);
+                printf("%s\n", pipename);
                 fserver=open(pipename,O_RDONLY);
-                read(fserver,client_pipes[session_id],PIPENAME_SIZE);
+                if (fserver == -1) {
+                    printf("error\n");
+                }
+
+                if (read(fserver,client_pipes[session_id],PIPENAME_SIZE) == -1) {
+                    printf("erro\n");
+                }
+                printf("leu");
                 close(fserver);
                 fclient=open(client_pipes[session_id],O_WRONLY);
                 write(fclient,session_id,sizeof(int));
