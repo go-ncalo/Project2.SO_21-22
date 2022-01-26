@@ -22,8 +22,6 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    printf("entrou no teste\n");
-
     assert(tfs_mount(argv[1], argv[2]) == 0);
 
     f = tfs_open(path, TFS_O_CREAT);

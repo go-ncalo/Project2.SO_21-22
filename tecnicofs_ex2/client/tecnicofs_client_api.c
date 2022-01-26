@@ -8,10 +8,13 @@
 #include <unistd.h>
 #include <errno.h>
 
+#define PIPENAME_SIZE 40
 
-static char const *server_pipe;
-static char const *client_pipe;
-static int session_id;
+static char *server_pipe;
+static char *client_pipe;
+int session_id;
+
+int read_int_client_pipe();
 
 int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
 
@@ -20,37 +23,21 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     client_pipe=malloc(strlen(client_pipe_path)+1);
     memcpy(client_pipe,client_pipe_path,strlen(client_pipe_path)+1);
 
-    char *pipename = client_pipe_path;
-    unlink(pipename);
-    if (mkfifo (pipename, 0777) < 0)
+    char buffer[PIPENAME_SIZE + 2];
+    memset(buffer, '\0', sizeof(buffer));
+    buffer[0] = TFS_OP_CODE_MOUNT;
+    size_t bytes = strlen(client_pipe);
+    strncpy(&buffer[1], client_pipe_path, bytes);
+
+    unlink(client_pipe);
+    if (mkfifo (client_pipe, 0777) < 0)
 		exit (1);
     
-    if (write_on_server_pipe(TFS_OP_CODE_MOUNT,sizeof(char))==-1) {
-        return -1;
-    }
-    printf("escreveu opcode no server\n");
-
-    if (write_on_server_pipe(client_pipe_path,strlen(client_pipe_path)+1)==-1) {
-        return -1;
-    }
-    printf("escreveu client path no server\n");
-
-
-    //int session_id=read_int_client_pipe();
-
-    int frd = open(client_pipe_path,O_RDONLY);
-    if (frd==-1) {
-        return -1;
-    }
-    if (read(frd,session_id,sizeof(int))==-1) {
-        return -1;
-    }
-    if (close(frd)==-1) {
+    if (write_on_server_pipe(buffer,sizeof(buffer))==-1) {
         return -1;
     }
 
-    printf("Session id: %d\n", session_id);
-
+    session_id = read_int_client_pipe();
     if (session_id!=-1) {
         return 0;
     }
@@ -118,16 +105,13 @@ int write_on_server_pipe(const void* message,size_t bytes) {
 }
 
 int read_int_client_pipe() {
-    printf("entrou no read\n");
     int value;
-    printf("here\n");
     int frd = open(client_pipe,O_RDONLY);
-    printf("erro\n");
-    if (frd==-1) {
+    if (frd == -1) {
         printf("erro1\n");
         return -1;
     }
-    if (read(frd,value,sizeof(int))==-1) {
+    if (read(frd,&value,sizeof(int))==-1) {
         printf("erro2\n");
         return -1;
     }
@@ -135,7 +119,6 @@ int read_int_client_pipe() {
          printf("erro3\n");
         return -1;
     }
-    printf("value: %d\n", value);
-    return value;
 
+    return value;
 }
