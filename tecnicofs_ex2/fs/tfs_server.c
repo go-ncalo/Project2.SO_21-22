@@ -4,6 +4,7 @@
 #include <fcntl.h> 
 #include <errno.h>
 #include <string.h>
+#include <pthread.h>
 
 int addSession();
 int deleteSession(int id);
@@ -19,10 +20,27 @@ int shutdown_after_all_closed_operation(int fserver);
 #define PIPENAME_SIZE 40
 #define FILE_NAME_SIZE 40
 
+
+typedef struct {
+    char opcode[1];
+    int session_id;
+    char filename[40];
+    int flags;
+    int fhandle;
+    size_t len;
+    char* buffer;
+} args_struct;
+
+
 static int sessions=0;
 static int freeSessions[S];
 static int file_descriptors[S];
 static char client_pipes[S][PIPENAME_SIZE];
+static pthread_t threads[S];
+static pthread_cond_t pthread_cond[S];
+static pthread_mutex_t mutexs[S];
+static args_struct args[S];
+static int active_tasks[S];
 
 int main(int argc, char **argv) {
 
@@ -44,6 +62,18 @@ int main(int argc, char **argv) {
     for (int i=0; i<S; i++) {
         freeSessions[i]=FREE;
         file_descriptors[i] = -1;
+
+        active_tasks[i]=0;
+        args[i].session_id=i;
+
+        if (pthread_create(&threads[i],NULL, &thread_handle, &args[i]) == -1)
+            return -1;
+
+        if (pthread_cond_init(&pthread_cond[i], 0) != 0)
+            return -1;
+
+        if (pthread_mutex_init(&mutexs[i], 0) != 0)
+            return -1;
     }
 
     
@@ -52,13 +82,9 @@ int main(int argc, char **argv) {
     int i = 1;
     char r[1];
 
-    /* TO DO */
-
-    /*onde escrevemos para fifo do servidor o OPCODE  eos argumentos*/
-
     fserver = open(pipename,O_RDONLY);
     if (fserver == -1) {
-        printf("erro HERE\n");
+        return -1;
     }
 
     while (i == 1) {
@@ -67,6 +93,7 @@ int main(int argc, char **argv) {
             fserver = open(pipename,O_RDONLY);
             continue;
         }
+        int session_id;
         switch (r[0]) {
             case TFS_OP_CODE_MOUNT:
                 mount_operation(fserver);
@@ -75,6 +102,7 @@ int main(int argc, char **argv) {
             case TFS_OP_CODE_UNMOUNT:
                 unmount_operation(fserver);
                 break;
+
             case TFS_OP_CODE_OPEN:
                 open_operation(fserver);
                 break;
@@ -98,6 +126,12 @@ int main(int argc, char **argv) {
 
             default:
                 break;
+        }
+        if (r[0]!=TFS_OP_CODE_MOUNT) {
+            pthread_mutex_lock(&mutexs[session_id]);
+            active_tasks[session_id]=1;
+            pthread_cond_signal(&pthread_cond[session_id]);
+            pthread_mutex_unlock(&mutexs[session_id]);
         }
     }
 
@@ -138,11 +172,11 @@ int deleteSession(int id) {
     return 0;
 }
 
-int mount_operation(int fserver) {
+int mount_operation() {
     int session_id = addSession();
 
     if (fserver == -1) {
-        printf("error\n");
+        return -1;
     }
 
     if (read(fserver, client_pipes[session_id], PIPENAME_SIZE) == -1) {
@@ -157,7 +191,7 @@ int mount_operation(int fserver) {
     return 0;
 }
 
-int open_operation(int fserver) {
+int open_operation() {
     char file[FILE_NAME_SIZE];
     int flag;
     int session_id;
@@ -183,7 +217,7 @@ int open_operation(int fserver) {
     return 0;
 }
 
-int unmount_operation(int fserver) {
+int unmount_operation() {
     int session_id;
 
     if (read(fserver, &session_id, sizeof(int)) == -1) {
@@ -205,7 +239,7 @@ int unmount_operation(int fserver) {
     return 0;
 }
 
-int close_operation(int fserver) {
+int close_operation() {
     int session_id, fhandle;
 
     if (read(fserver, &session_id, sizeof(int)) == -1) {
@@ -226,7 +260,7 @@ int close_operation(int fserver) {
     return 0;
 }
 
-int write_operation(int fserver) {
+int write_operation() {
     int session_id, fhandle;
     size_t len;
 
@@ -258,7 +292,7 @@ int write_operation(int fserver) {
     return 0;
 }
 
-int read_operation(int fserver) {
+int read_operation() {
     int session_id, fhandle;
     size_t len;
 
@@ -289,7 +323,7 @@ int read_operation(int fserver) {
     return 0;
 }
 
-int shutdown_after_all_closed_operation(int fserver) {
+int shutdown_after_all_closed_operation() {
     int session_id, fhandle;
 
     if (read(fserver, &session_id, sizeof(int)) == -1) {
@@ -312,4 +346,56 @@ int shutdown_after_all_closed_operation(int fserver) {
     }
 
     return 0;
+}
+
+
+int thread_handle(void* args) {
+
+    while (1) {
+        pthread_mutex_lock(&mutexs[((args_struct*)args)->session_id]);
+        while (active_tasks[((args_struct*)args)->session_id] != 0) {
+            pthread_cond_wait(&pthread_cond[((args_struct*)args)->session_id], &mutexs[((args_struct*)args)->session_id]);
+        }
+        pthread_mutex_unlock(&mutexs[((args_struct*)args)->session_id]);
+
+    }
+    switch (((args_struct*)args)->opcode) {
+            case TFS_OP_CODE_UNMOUNT:
+                unmount_operation();
+                break;
+
+            case TFS_OP_CODE_OPEN:
+                open_operation();
+                break;
+
+            case TFS_OP_CODE_CLOSE:
+                close_operation();  
+                break;
+
+            case TFS_OP_CODE_WRITE:
+                write_operation();
+                break;
+
+            case TFS_OP_CODE_READ:
+                read_operation();
+                break;
+            
+            case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
+                shutdown_after_all_closed_operation();
+                i = 0;
+                break;
+
+            default:
+                break;
+        }
+
+}
+
+int read_unmount_operation(int fserver) {
+    int session_id;
+    if (read(fserver, &session_id, sizeof(int)) == -1) {
+        return -1;
+    }
+    return session_id;
+
 }
