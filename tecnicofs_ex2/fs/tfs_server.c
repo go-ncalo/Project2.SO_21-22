@@ -42,12 +42,15 @@ typedef struct {
 
 static int sessions=0;
 static int freeSessions[S];
+static pthread_mutex_t freeSessions_mutex;
 static int file_descriptors[S];
+static pthread_mutex_t fileDescriptors_mutex;
 static char client_pipes[S][PIPENAME_SIZE];
+static pthread_mutex_t clientPipes_mutex;
 static pthread_t threads[S];
 static pthread_cond_t pthread_cond[S];
-static pthread_mutex_t mutexs[S];
 static args_struct args[S];
+static pthread_mutex_t mutexs[S];
 static int active_tasks[S];
 
 int main(int argc, char **argv) {
@@ -66,6 +69,16 @@ int main(int argc, char **argv) {
     if (mkfifo (pipename, 0640) < 0)
 		exit (1);
 
+    if (pthread_mutex_init(&freeSessions_mutex, 0) != 0)
+        return -1;
+
+    if (pthread_mutex_init(&fileDescriptors_mutex, 0) != 0)
+        return -1;
+
+    if (pthread_mutex_init(&clientPipes_mutex, 0) != 0)
+        return -1;
+
+
     for (int j=0; j<S; j++) {
         freeSessions[j]=FREE;
         file_descriptors[j] = -1;
@@ -73,14 +86,16 @@ int main(int argc, char **argv) {
         active_tasks[j]=0;
         args[j].session_id=j;
 
-        if (pthread_create(&threads[j],NULL, &thread_handle, &args[j]) == -1)
-            return -1;
 
         if (pthread_cond_init(&pthread_cond[j], 0) != 0)
             return -1;
 
         if (pthread_mutex_init(&mutexs[j], 0) != 0)
             return -1;
+
+        if (pthread_create(&threads[j],NULL, &thread_handle, &args[j]) == -1)
+            return -1;
+
     }
 
     
@@ -149,6 +164,14 @@ int main(int argc, char **argv) {
             close(file_descriptors[j]);
             file_descriptors[j] = -1;
         }
+        if (pthread_join(&threads[j],NULL) == -1)
+            return -1;
+
+        if (pthread_cond_destroy(&pthread_cond[j]) != 0)
+            return -1;
+
+        if (pthread_mutex_destroy(&mutexs[j]) != 0)
+            return -1;
     }
 
     close(fserver);
