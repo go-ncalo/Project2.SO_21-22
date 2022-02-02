@@ -43,10 +43,8 @@ typedef struct {
 static int sessions=0;
 static int freeSessions[S];
 static pthread_mutex_t freeSessions_mutex;
+//PODE SER NECESSARIO PROTEGER COM LOCKS O FILE_DESCR
 static int file_descriptors[S];
-static pthread_mutex_t fileDescriptors_mutex;
-static char client_pipes[S][PIPENAME_SIZE];
-static pthread_mutex_t clientPipes_mutex;
 static pthread_t threads[S];
 static pthread_cond_t pthread_cond[S];
 static args_struct args[S];
@@ -72,11 +70,6 @@ int main(int argc, char **argv) {
     if (pthread_mutex_init(&freeSessions_mutex, 0) != 0)
         return -1;
 
-    if (pthread_mutex_init(&fileDescriptors_mutex, 0) != 0)
-        return -1;
-
-    if (pthread_mutex_init(&clientPipes_mutex, 0) != 0)
-        return -1;
 
 
     for (int j=0; j<S; j++) {
@@ -164,7 +157,7 @@ int main(int argc, char **argv) {
             close(file_descriptors[j]);
             file_descriptors[j] = -1;
         }
-        if (pthread_join(&threads[j],NULL) == -1)
+        if (pthread_join(threads[j],NULL) == -1)
             return -1;
 
         if (pthread_cond_destroy(&pthread_cond[j]) != 0)
@@ -180,41 +173,49 @@ int main(int argc, char **argv) {
 }
 
 int addSession() {
+    pthread_mutex_lock(&freeSessions_mutex);
     for (int j=0; j < S; j++) {
         if (freeSessions[j] == FREE) {
             freeSessions[j] = TAKEN;
             sessions++;
+            pthread_mutex_unlock(&freeSessions_mutex);
             return j;
         }
     }
+    pthread_mutex_unlock(&freeSessions_mutex);
     return -1;
 }
 
 int deleteSession(int id) {
 
+    pthread_mutex_lock(&freeSessions_mutex);
+
     if (freeSessions[id] == FREE) {
+        pthread_mutex_unlock(&freeSessions_mutex);
         return -1;
     }
 
     freeSessions[id] = FREE;
     sessions--;
     
+    pthread_mutex_unlock(&freeSessions_mutex);
 
     return 0;
 }
 
 int mount_operation(int fserver) {
     int session_id = addSession();
+    static char client_pipe[PIPENAME_SIZE];
 
     if (fserver == -1) {
         return -1;
     }
 
-    if (read(fserver, client_pipes[session_id], PIPENAME_SIZE) == -1) {
+    if (read(fserver, &client_pipe, PIPENAME_SIZE) == -1) {
         return -1;
     }
 
-    int fclient = open(client_pipes[session_id], O_WRONLY);
+    int fclient = open(client_pipe, O_WRONLY);
     file_descriptors[session_id] = fclient;
     if (write(fclient, &session_id, sizeof(int)) == -1) {
         return -1;
@@ -247,7 +248,6 @@ int unmount_operation(int session_id) {
         return -1;
     }
     file_descriptors[session_id] = -1;
-    strcpy(client_pipes[session_id], "");
 
     return 0;
 }
@@ -318,8 +318,19 @@ void* thread_handle(void* arg) {
         pthread_mutex_lock(&mutexs[((args_struct*)arg)->session_id]);
         while (active_tasks[((args_struct*)arg)->session_id] !=1) {
             pthread_cond_wait(&pthread_cond[((args_struct*)arg)->session_id], &mutexs[((args_struct*)arg)->session_id]);
+            //unlock
+            // wait for signl
+            //lock
         }
-        pthread_mutex_unlock(&mutexs[((args_struct*)arg)->session_id]);
+        active_tasks[((args_struct*)arg)->session_id]=0;
+        //args_struct args_cpy;
+        //args_cpy.session_id=((args_struct*)arg)->session_id;
+        //args_cpy.opcode[0]=((args_struct*)arg)->opcode[0];
+        //args_cpy.fhandle=((args_struct*)arg)->fhandle;
+        //args_cpy.flags=((args_struct*)arg)->flags;
+        //args_cpy.len=((args_struct*)arg)->len;
+
+        
 
         switch (((args_struct*)arg)->opcode[0]) {
 
@@ -339,6 +350,7 @@ void* thread_handle(void* arg) {
             case TFS_OP_CODE_WRITE:
                 write_operation(((args_struct*)arg)->session_id,((args_struct*)arg)->fhandle,
                                 ((args_struct*)arg)->buffer,((args_struct*)arg)->len);
+                printf("vai dar free\n");
                 free(((args_struct*)args)->buffer);
                 break;
 
@@ -354,8 +366,7 @@ void* thread_handle(void* arg) {
             default:
                 break;
         }
-    
-    active_tasks[((args_struct*)arg)->session_id]=0;
+        pthread_mutex_unlock(&mutexs[((args_struct*)arg)->session_id]);
     
     }
 
@@ -418,7 +429,7 @@ int parse_write_operation(int fserver) {
         return -1;
     }
     
-    
+    printf("vai dar malloc \n");
     args[session_id].buffer=malloc(args[session_id].len);
 
     if (read(fserver, args[session_id].buffer, args[session_id].len) == -1) {
