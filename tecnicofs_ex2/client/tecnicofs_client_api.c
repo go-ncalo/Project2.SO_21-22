@@ -20,7 +20,7 @@ int read_int_client_pipe();
 
 int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
 
-    client_pipe=malloc(strlen(client_pipe_path)+1);
+    client_pipe = malloc(strlen(client_pipe_path)+1);
     if (client_pipe == NULL) {
         return -1;
     }
@@ -33,7 +33,6 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     strncpy(&buffer[1], client_pipe_path, bytes);
 
     unlink(client_pipe);
-
     if (mkfifo (client_pipe, 0777) < 0)
 		exit (1);
 
@@ -70,6 +69,7 @@ int tfs_unmount() {
     }
 
     int return_value = read_int_client_pipe();
+    // Closes both the clients's and server's pipes
     if (return_value != -1) {
         if (unlink(client_pipe) == -1) {
             return -1;
@@ -157,6 +157,7 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         return -1;
     }
 
+    // buffer to storage the number of bytes read and the contents read from tfs_read
     char buffer_server[len + sizeof(int)];
     if (frd == -1) {
         return -1;
@@ -193,7 +194,7 @@ int tfs_shutdown_after_all_closed() {
     return -1;
 }
 
-
+// Function to write on the server's pipe
 int write_on_server_pipe(const void* message,size_t bytes) {
     if (write(fwr, message,bytes)==-1) {
         return -1;
@@ -202,6 +203,7 @@ int write_on_server_pipe(const void* message,size_t bytes) {
     return 0;
 }
 
+// Function to read an int from the client's pipe
 int read_int_client_pipe() {
     int value;
     if (read(frd,&value,sizeof(int))==-1) {

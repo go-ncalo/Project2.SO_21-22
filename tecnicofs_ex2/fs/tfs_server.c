@@ -62,7 +62,12 @@ int main(int argc, char **argv) {
     int fserver;
     printf("Starting TecnicoFS server with pipe called %s\n", pipename);
 
-    unlink(pipename);
+    if (unlink(pipename) != 0) {
+        if (errno != 2) {
+            return -1;
+        }
+    }
+
     if (mkfifo (pipename, 0640) < 0)
 		exit (1);
 
@@ -307,7 +312,6 @@ int unmount_operation(int session_id) {
 }
 
 int close_operation(int session_id, int fhandle) {
-
     int return_value = tfs_close(fhandle);
 
     if (return_value == -1) {
@@ -323,7 +327,6 @@ int close_operation(int session_id, int fhandle) {
 }
 
 int write_operation(int session_id, int fhandle, void const *buffer, size_t len) {
-    
     int return_value = (int) tfs_write(fhandle, buffer, len);
 
     if (return_value == -1) {
