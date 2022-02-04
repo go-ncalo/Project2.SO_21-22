@@ -41,8 +41,6 @@ typedef struct {
     char buffer[MESSAGE_SIZE];
 } args_struct;
 
-
-static int sessions = 0;
 static int freeSessions[S];
 static pthread_mutex_t freeSessions_mutex;
 static int file_descriptors[S];
@@ -207,7 +205,6 @@ int addSession() {
     for (int j=0; j < S; j++) {
         if (freeSessions[j] == FREE) {
             freeSessions[j] = TAKEN;
-            sessions++;
             if (pthread_mutex_unlock(&freeSessions_mutex) != 0) {
                 return -1;
             }
@@ -234,7 +231,6 @@ int deleteSession(int id) {
     }
 
     freeSessions[id] = FREE;
-    sessions--;
     
     if (pthread_mutex_unlock(&freeSessions_mutex) != 0) {
         return -1;
