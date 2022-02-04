@@ -11,16 +11,16 @@
 #define PIPENAME_SIZE 40
 #define FILE_NAME_SIZE 40
 
-static char *server_pipe;
+//static char *server_pipe;
 static char *client_pipe;
 int session_id;
+int fwr;
+int frd;
 
 int read_int_client_pipe();
 
 int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
 
-    server_pipe=malloc(strlen(server_pipe_path)+1);
-    memcpy(server_pipe,server_pipe_path,strlen(server_pipe_path)+1);
     client_pipe=malloc(strlen(client_pipe_path)+1);
     memcpy(client_pipe,client_pipe_path,strlen(client_pipe_path)+1);
 
@@ -33,8 +33,15 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     unlink(client_pipe);
     if (mkfifo (client_pipe, 0777) < 0)
 		exit (1);
+
+    fwr = open(server_pipe_path,O_WRONLY);
     
     if (write_on_server_pipe(buffer,PIPENAME_SIZE+sizeof(char)) == -1) {
+        return -1;
+    }
+
+    frd = open(client_pipe,O_RDONLY);
+    if (frd == -1) {
         return -1;
     }
 
@@ -61,8 +68,11 @@ int tfs_unmount() {
         if (unlink(client_pipe) == -1) {
             return -1;
         }
+        close(fwr);
+        if (close(frd)==-1) {
+            return -1;
+        }
         free(client_pipe);
-        free(server_pipe);
         return return_value;
     }
     return -1;
@@ -140,16 +150,13 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     }
 
     char buffer_server[len + sizeof(int)];
-    int frd = open(client_pipe,O_RDONLY);
     if (frd == -1) {
         return -1;
     }
     if (read(frd, buffer_server, len + sizeof(int))==-1) {
         return -1;
     }
-    if (close(frd)==-1) {
-        return -1;
-    }
+
     int return_value;
     memcpy(&return_value, buffer_server, sizeof(int));
     if (return_value != -1) {
@@ -180,14 +187,7 @@ int tfs_shutdown_after_all_closed() {
 
 
 int write_on_server_pipe(const void* message,size_t bytes) {
-    int fwr = open(server_pipe,O_WRONLY);
-    if (fwr==-1) {
-        return -1;
-    }
     if (write(fwr, message,bytes)==-1) {
-        return -1;
-    }
-    if (close(fwr)==-1) {
         return -1;
     }
 
@@ -196,14 +196,7 @@ int write_on_server_pipe(const void* message,size_t bytes) {
 
 int read_int_client_pipe() {
     int value;
-    int frd = open(client_pipe,O_RDONLY);
-    if (frd == -1) {
-        return -1;
-    }
     if (read(frd,&value,sizeof(int))==-1) {
-        return -1;
-    }
-    if (close(frd)==-1) {
         return -1;
     }
 

@@ -23,36 +23,27 @@ int main(int argc, char **argv) {
     }
 
     assert(tfs_mount(argv[1], argv[2]) == 0);
-    printf("mount\n");
 
     f = tfs_open(path, TFS_O_CREAT);
     assert(f != -1);
-    printf("open\n");
 
     r = tfs_write(f, str, strlen(str));
     assert(r == strlen(str));
-    printf("write\n");
 
     assert(tfs_close(f) != -1);
-    printf("close\n");
 
     f = tfs_open(path, 0);
     assert(f != -1);
-    printf("open2\n");
 
     r = tfs_read(f, buffer, sizeof(buffer) - 1);
     assert(r == strlen(str));
-    printf("read\n");
 
     buffer[r] = '\0';
     assert(strcmp(buffer, str) == 0);
-    printf("read what was supposed\n");
 
     assert(tfs_close(f) != -1);
-    printf("close2\n");
 
     assert(tfs_unmount() == 0);
-    printf("unmount\n");
 
     printf("Successful test.\n");
 

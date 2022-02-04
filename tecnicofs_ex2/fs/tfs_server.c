@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <string.h>
 #include <pthread.h>
+#include <signal.h>
 
 int addSession();
 int deleteSession(int id);
@@ -27,23 +28,23 @@ int i = 1;
 #define S 20
 #define PIPENAME_SIZE 40
 #define FILE_NAME_SIZE 40
+#define MESSAGE_SIZE 100
 
 
 typedef struct {
     char opcode[1];
     int session_id;
-    char filename[40];
+    char filename[FILE_NAME_SIZE];
     int flags;
     int fhandle;
     size_t len;
-    char* buffer;
+    char buffer[MESSAGE_SIZE];
 } args_struct;
 
 
 static int sessions=0;
 static int freeSessions[S];
 static pthread_mutex_t freeSessions_mutex;
-//PODE SER NECESSARIO PROTEGER COM LOCKS O FILE_DESCR
 static int file_descriptors[S];
 static pthread_t threads[S];
 static pthread_cond_t pthread_cond[S];
@@ -66,6 +67,10 @@ int main(int argc, char **argv) {
     unlink(pipename);
     if (mkfifo (pipename, 0640) < 0)
 		exit (1);
+
+    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) { 
+        return -1;
+    }
 
     if (pthread_mutex_init(&freeSessions_mutex, 0) != 0)
         return -1;
@@ -92,7 +97,9 @@ int main(int argc, char **argv) {
     }
 
     
-    tfs_init();
+    if (tfs_init() != 0) {
+        return -1;
+    }
 
     i = 1;
     char r[1];
@@ -104,8 +111,16 @@ int main(int argc, char **argv) {
 
     while (i == 1) {
         if (read(fserver, r, sizeof(char)) == 0) {
-            close(fserver);
+            if (close(fserver) != 0) {
+                return -1;
+            }
+
             fserver = open(pipename,O_RDONLY);
+
+            if (fserver == -1) {
+                return -1;
+            }
+            
             continue;
         }
         int session_id=-1;
@@ -350,8 +365,8 @@ void* thread_handle(void* arg) {
             case TFS_OP_CODE_WRITE:
                 write_operation(((args_struct*)arg)->session_id,((args_struct*)arg)->fhandle,
                                 ((args_struct*)arg)->buffer,((args_struct*)arg)->len);
-                printf("vai dar free\n");
-                free(((args_struct*)args)->buffer);
+                //printf("vai dar free\n");
+                //free(((args_struct*)args)->buffer);
                 break;
 
             case TFS_OP_CODE_READ:
@@ -361,6 +376,7 @@ void* thread_handle(void* arg) {
             
             case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
                 shutdown_after_all_closed_operation(((args_struct*)arg)->session_id);
+                exit(0);
                 break;
 
             default:
@@ -429,8 +445,8 @@ int parse_write_operation(int fserver) {
         return -1;
     }
     
-    printf("vai dar malloc \n");
-    args[session_id].buffer=malloc(args[session_id].len);
+    //printf("vai dar malloc \n");
+    //args[session_id].buffer=malloc(args[session_id].len);
 
     if (read(fserver, args[session_id].buffer, args[session_id].len) == -1) {
         return -1;
