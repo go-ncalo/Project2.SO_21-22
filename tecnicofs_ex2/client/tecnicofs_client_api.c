@@ -11,7 +11,6 @@
 #define PIPENAME_SIZE 40
 #define FILE_NAME_SIZE 40
 
-//static char *server_pipe;
 static char *client_pipe;
 int session_id;
 int fwr;
@@ -22,6 +21,9 @@ int read_int_client_pipe();
 int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
 
     client_pipe=malloc(strlen(client_pipe_path)+1);
+    if (client_pipe == NULL) {
+        return -1;
+    }
     memcpy(client_pipe,client_pipe_path,strlen(client_pipe_path)+1);
 
     char buffer[PIPENAME_SIZE + 1];
@@ -31,10 +33,14 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     strncpy(&buffer[1], client_pipe_path, bytes);
 
     unlink(client_pipe);
+
     if (mkfifo (client_pipe, 0777) < 0)
 		exit (1);
 
     fwr = open(server_pipe_path,O_WRONLY);
+    if (fwr == -1) {
+        return -1;
+    }
     
     if (write_on_server_pipe(buffer,PIPENAME_SIZE+sizeof(char)) == -1) {
         return -1;
@@ -68,7 +74,9 @@ int tfs_unmount() {
         if (unlink(client_pipe) == -1) {
             return -1;
         }
-        close(fwr);
+        if (close(fwr)==-1) {
+            return -1;
+        }
         if (close(frd)==-1) {
             return -1;
         }

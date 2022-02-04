@@ -28,7 +28,7 @@ int i = 1;
 #define S 20
 #define PIPENAME_SIZE 40
 #define FILE_NAME_SIZE 40
-#define MESSAGE_SIZE 100
+#define MESSAGE_SIZE 128
 
 
 typedef struct {
@@ -42,7 +42,7 @@ typedef struct {
 } args_struct;
 
 
-static int sessions=0;
+static int sessions = 0;
 static int freeSessions[S];
 static pthread_mutex_t freeSessions_mutex;
 static int file_descriptors[S];
@@ -75,14 +75,12 @@ int main(int argc, char **argv) {
     if (pthread_mutex_init(&freeSessions_mutex, 0) != 0)
         return -1;
 
-
-
     for (int j=0; j<S; j++) {
-        freeSessions[j]=FREE;
+        freeSessions[j] = FREE;
         file_descriptors[j] = -1;
 
-        active_tasks[j]=0;
-        args[j].session_id=j;
+        active_tasks[j] = 0;
+        args[j].session_id = j;
 
 
         if (pthread_cond_init(&pthread_cond[j], 0) != 0)
@@ -95,7 +93,6 @@ int main(int argc, char **argv) {
             return -1;
 
     }
-
     
     if (tfs_init() != 0) {
         return -1;
@@ -123,7 +120,8 @@ int main(int argc, char **argv) {
             
             continue;
         }
-        int session_id=-1;
+        
+        int session_id = -1;
         switch (r[0]) {
 
             case TFS_OP_CODE_MOUNT:
@@ -131,48 +129,57 @@ int main(int argc, char **argv) {
                 break;
             
             case TFS_OP_CODE_UNMOUNT:
-                session_id=parse_unmount_operation(fserver);
+                session_id = parse_unmount_operation(fserver);
                 break;
 
             case TFS_OP_CODE_OPEN:
-                session_id=parse_open_operation(fserver);
+                session_id = parse_open_operation(fserver);
                 break;
 
             case TFS_OP_CODE_CLOSE:
-                session_id=parse_close_operation(fserver);  
+                session_id = parse_close_operation(fserver);  
                 break;
 
             case TFS_OP_CODE_WRITE:
-                session_id=parse_write_operation(fserver);
+                session_id = parse_write_operation(fserver);
                 break;
 
             case TFS_OP_CODE_READ:
-                session_id=parse_read_operation(fserver);
+                session_id = parse_read_operation(fserver);
                 break;
             
             case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
-                session_id=parse_shutdown_after_all_closed_operation(fserver);
+                session_id = parse_shutdown_after_all_closed_operation(fserver);
                 break;
 
             default:
                 break;
         }
-        if (r[0]!=TFS_OP_CODE_MOUNT && session_id!=-1) {
-            pthread_mutex_lock(&mutexs[session_id]);
-            args[session_id].opcode[0]=r[0];
-            active_tasks[session_id]=1;
-            pthread_cond_signal(&pthread_cond[session_id]);        
-            pthread_mutex_unlock(&mutexs[session_id]);
+        if (r[0] != TFS_OP_CODE_MOUNT && session_id != -1) {
+            if (pthread_mutex_lock(&mutexs[session_id]) != 0) {
+                return -1;
+            }
+            args[session_id].opcode[0] = r[0];
+            active_tasks[session_id] = 1;
+            if (pthread_cond_signal(&pthread_cond[session_id]) != 0) {
+                return -1;
+            }       
+            if (pthread_mutex_unlock(&mutexs[session_id]) != 0) {
+                return -1;
+            }
         }
     }
 
     for (int j=0; j<S; j++) {
         freeSessions[j] = FREE;
         if (file_descriptors[j] != -1) {
-            close(file_descriptors[j]);
+            if (close(file_descriptors[j]) != 0) {
+                return -1;
+            }
             file_descriptors[j] = -1;
         }
-        if (pthread_join(threads[j],NULL) == -1)
+
+        if (pthread_join(threads[j],NULL) != 0)
             return -1;
 
         if (pthread_cond_destroy(&pthread_cond[j]) != 0)
@@ -182,44 +189,67 @@ int main(int argc, char **argv) {
             return -1;
     }
 
-    close(fserver);
-    unlink(pipename);
+    if (close(fserver) != 0) {
+        return -1;
+    }
+    if (unlink(pipename) != 0) {
+        return -1;
+    }
+
     return 0;
 }
 
 int addSession() {
-    pthread_mutex_lock(&freeSessions_mutex);
+    if (pthread_mutex_lock(&freeSessions_mutex) != 0) {
+        return -1;
+    }
+
     for (int j=0; j < S; j++) {
         if (freeSessions[j] == FREE) {
             freeSessions[j] = TAKEN;
             sessions++;
-            pthread_mutex_unlock(&freeSessions_mutex);
+            if (pthread_mutex_unlock(&freeSessions_mutex) != 0) {
+                return -1;
+            }
             return j;
         }
     }
-    pthread_mutex_unlock(&freeSessions_mutex);
+    if (pthread_mutex_unlock(&freeSessions_mutex) != 0) {
+        return -1;
+    }
     return -1;
 }
 
 int deleteSession(int id) {
 
-    pthread_mutex_lock(&freeSessions_mutex);
+    if (pthread_mutex_lock(&freeSessions_mutex) != 0) {
+        return -1;
+    }
 
     if (freeSessions[id] == FREE) {
-        pthread_mutex_unlock(&freeSessions_mutex);
+        if (pthread_mutex_unlock(&freeSessions_mutex) != 0) {
+            return -1;
+        }
         return -1;
     }
 
     freeSessions[id] = FREE;
     sessions--;
     
-    pthread_mutex_unlock(&freeSessions_mutex);
+    if (pthread_mutex_unlock(&freeSessions_mutex) != 0) {
+        return -1;
+    }
 
     return 0;
 }
 
 int mount_operation(int fserver) {
     int session_id = addSession();
+
+    if (session_id == -1) {
+        return -1;
+    }
+
     static char client_pipe[PIPENAME_SIZE];
 
     if (fserver == -1) {
@@ -231,6 +261,11 @@ int mount_operation(int fserver) {
     }
 
     int fclient = open(client_pipe, O_WRONLY);
+
+    if (fclient == -1) {
+        return -1;
+    }
+
     file_descriptors[session_id] = fclient;
     if (write(fclient, &session_id, sizeof(int)) == -1) {
         return -1;
@@ -241,6 +276,10 @@ int mount_operation(int fserver) {
 int open_operation(int session_id, char const *name, int flags) {
 
     int return_value = tfs_open(name, flags);
+
+    if (return_value == -1) {
+        return -1;
+    }
 
     int fclient = file_descriptors[session_id];
 
@@ -254,6 +293,10 @@ int open_operation(int session_id, char const *name, int flags) {
 
 int unmount_operation(int session_id) {
     int return_value = deleteSession(session_id);
+
+    if (return_value == -1) {
+        return -1;
+    }
 
     int fclient = file_descriptors[session_id];
     if (write(fclient, &return_value, sizeof(int)) == -1) {
@@ -271,6 +314,10 @@ int close_operation(int session_id, int fhandle) {
 
     int return_value = tfs_close(fhandle);
 
+    if (return_value == -1) {
+        return -1;
+    }
+
     int fclient = file_descriptors[session_id];
     if (write(fclient, &return_value, sizeof(int)) == -1) {
         return -1;
@@ -282,6 +329,10 @@ int close_operation(int session_id, int fhandle) {
 int write_operation(int session_id, int fhandle, void const *buffer, size_t len) {
     
     int return_value = (int) tfs_write(fhandle, buffer, len);
+
+    if (return_value == -1) {
+        return -1;
+    }
 
     int fclient = file_descriptors[session_id];
     if (write(fclient, &return_value, sizeof(int)) == -1) {
@@ -297,6 +348,10 @@ int read_operation(int session_id, int fhandle, size_t len) {
     char return_buffer[len + sizeof(int)];
 
     int return_value = (int) tfs_read(fhandle, buffer, len);
+
+    if (return_value == -1) {
+        return -1;
+    }
 
     memcpy(return_buffer, &return_value, sizeof(int));
     strncpy(&return_buffer[sizeof(int)], buffer, len);
@@ -330,59 +385,64 @@ int shutdown_after_all_closed_operation(int session_id) {
 void* thread_handle(void* arg) {
 
     while (1) {
-        pthread_mutex_lock(&mutexs[((args_struct*)arg)->session_id]);
+        if (pthread_mutex_lock(&mutexs[((args_struct*)arg)->session_id]) != 0) {
+            return (void*) -1;
+        }
         while (active_tasks[((args_struct*)arg)->session_id] !=1) {
-            pthread_cond_wait(&pthread_cond[((args_struct*)arg)->session_id], &mutexs[((args_struct*)arg)->session_id]);
-            //unlock
-            // wait for signl
-            //lock
+            if (pthread_cond_wait(&pthread_cond[((args_struct*)arg)->session_id], &mutexs[((args_struct*)arg)->session_id]) != 0) {
+                return (void*) -1;
+            }
         }
         active_tasks[((args_struct*)arg)->session_id]=0;
-        //args_struct args_cpy;
-        //args_cpy.session_id=((args_struct*)arg)->session_id;
-        //args_cpy.opcode[0]=((args_struct*)arg)->opcode[0];
-        //args_cpy.fhandle=((args_struct*)arg)->fhandle;
-        //args_cpy.flags=((args_struct*)arg)->flags;
-        //args_cpy.len=((args_struct*)arg)->len;
-
         
-
         switch (((args_struct*)arg)->opcode[0]) {
 
             case TFS_OP_CODE_UNMOUNT:
-                unmount_operation(((args_struct*)arg)->session_id);
+                if (unmount_operation(((args_struct*)arg)->session_id) == -1) {
+                    return (void*) -1;
+                }
                 break;
 
             case TFS_OP_CODE_OPEN:
-                open_operation(((args_struct*)arg)->session_id, ((args_struct*)arg)->filename,
-                                ((args_struct*)arg)->flags);
+                if (open_operation(((args_struct*)arg)->session_id, ((args_struct*)arg)->filename,
+                                ((args_struct*)arg)->flags) == -1) {
+                    return (void*) -1;
+                }
                 break;
 
             case TFS_OP_CODE_CLOSE:
-                close_operation(((args_struct*)arg)->session_id,((args_struct*)arg)->fhandle);  
+                if (close_operation(((args_struct*)arg)->session_id,((args_struct*)arg)->fhandle) == -1) {
+                    return (void*) -1;
+                }  
                 break;
 
             case TFS_OP_CODE_WRITE:
-                write_operation(((args_struct*)arg)->session_id,((args_struct*)arg)->fhandle,
-                                ((args_struct*)arg)->buffer,((args_struct*)arg)->len);
-                //printf("vai dar free\n");
-                //free(((args_struct*)args)->buffer);
+                if (write_operation(((args_struct*)arg)->session_id,((args_struct*)arg)->fhandle,
+                                ((args_struct*)arg)->buffer,((args_struct*)arg)->len) == -1) {
+                    return (void*) -1;
+                }
                 break;
 
             case TFS_OP_CODE_READ:
-                read_operation(((args_struct*)arg)->session_id,((args_struct*)arg)->fhandle, 
-                                ((args_struct*)arg)->len);
+                if (read_operation(((args_struct*)arg)->session_id,((args_struct*)arg)->fhandle, 
+                                ((args_struct*)arg)->len) == -1) {
+                    return (void*) -1;
+                }
                 break;
             
             case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
-                shutdown_after_all_closed_operation(((args_struct*)arg)->session_id);
+                if (shutdown_after_all_closed_operation(((args_struct*)arg)->session_id) == -1) {
+                    return (void*) -1;
+                }
                 exit(0);
                 break;
 
             default:
                 break;
         }
-        pthread_mutex_unlock(&mutexs[((args_struct*)arg)->session_id]);
+        if (pthread_mutex_unlock(&mutexs[((args_struct*)arg)->session_id]) != 0) {
+            return (void*) -1;
+        }
     
     }
 
@@ -409,7 +469,6 @@ int parse_open_operation(int fserver) {
     if (read(fserver, &args[session_id].flags, sizeof(int)) == -1) {
         return -1;
     }
-
 
     return session_id;
 }
@@ -444,9 +503,6 @@ int parse_write_operation(int fserver) {
     if (read(fserver, &args[session_id].len, sizeof(size_t)) == -1) {
         return -1;
     }
-    
-    //printf("vai dar malloc \n");
-    //args[session_id].buffer=malloc(args[session_id].len);
 
     if (read(fserver, args[session_id].buffer, args[session_id].len) == -1) {
         return -1;
